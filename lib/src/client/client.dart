@@ -36,7 +36,7 @@ class AwsS3Client {
       Client client})
       : _accessKey = accessKey,
         _secretKey = secretKey,
-        _host = host ?? "s3.$region.amazonaws.com",
+        _host = host ?? "$bucketId.s3.$region.amazonaws.com",
         _bucketId = bucketId,
         _region = region,
         _sessionToken = sessionToken,
@@ -66,7 +66,7 @@ class AwsS3Client {
   ///You can use this method to integrate this client with an HTTP client of your choice.
   SignedRequestParams buildSignedGetParams(
       {String key, Map<String, String> queryParams}) {
-    final unencodedPath = "$_bucketId/$key";
+    final unencodedPath = "$key";
     final uri = Uri.https(_host, unencodedPath, queryParams);
     final payload = SigV4.hashCanonicalRequest('');
     final datetime = SigV4.generateDatetime();
@@ -123,6 +123,69 @@ $payload''';
       default:
         throw S3Exception(response);
     }
+  }
+
+  Future<Response> putObject(
+      String key, String contentType, List<int> objectBytes) {
+    return _doSignedPutObjectRequest(
+        key: key, contentType: contentType, body: objectBytes);
+  }
+
+  ///Returns a [SignedRequestParams] object containing the uri and the HTTP headers
+  ///needed to do a signed PUT request to AWS S3. [key] is the path to write the object.
+  ///
+  ///Does not actually execute a request.
+  ///You can use this method to integrate this client with an HTTP client of your choice.
+  /// Example usage in test folder.
+  SignedRequestParams buildSignedPutObjectRequest(
+      String key, String contentType, String body) {
+    final unencodedPath = "$_bucketId/$key";
+    final uri = Uri.https(_host, unencodedPath);
+    final payload = SigV4.hashCanonicalRequest(body);
+    final datetime = SigV4.generateDatetime();
+    final canonicalQuery =
+        SigV4.buildCanonicalQueryString(Map<String, String>());
+    final credentialScope =
+        SigV4.buildCredentialScope(datetime, _region, _service);
+    final canonicalRequest = '''PUT
+${'/$unencodedPath'.split('/').map(Uri.encodeComponent).join('/')}
+$canonicalQuery
+host:$_host
+x-amz-content-sha256:$payload
+x-amz-date:$datetime
+x-amz-security-token:${_sessionToken ?? ""}
+
+host;x-amz-content-sha256;x-amz-date;x-amz-security-token
+$payload''';
+
+    final stringToSign = SigV4.buildStringToSign(datetime, credentialScope,
+        SigV4.hashCanonicalRequest(canonicalRequest));
+    final signingKey =
+        SigV4.calculateSigningKey(_secretKey, datetime, _region, _service);
+    final signature = SigV4.calculateSignature(signingKey, stringToSign);
+
+    final authorization = [
+      'AWS4-HMAC-SHA256 Credential=$_accessKey/$credentialScope',
+      'SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token',
+      'Signature=$signature',
+    ].join(',');
+
+    return SignedRequestParams(uri, {
+      'Authorization': authorization,
+      'x-amz-content-sha256': payload,
+      'x-amz-date': datetime,
+    });
+  }
+
+  Future<Response> _doSignedPutObjectRequest(
+      {String key, String contentType, List<int> body}) async {
+    String bodyStr = '';
+
+    body.forEach((i) => bodyStr += i.toString());
+
+    final SignedRequestParams params =
+        buildSignedPutObjectRequest(key, contentType, bodyStr);
+    return _client.put(params.uri, headers: params.headers, body: bodyStr);
   }
 }
 
