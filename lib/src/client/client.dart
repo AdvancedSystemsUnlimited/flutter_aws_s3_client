@@ -139,7 +139,7 @@ $payload''';
   /// Example usage in test folder.
   SignedRequestParams buildSignedPutObjectRequest(
       String key, String contentType, String body) {
-    final unencodedPath = "$_bucketId/$key";
+    final unencodedPath = "$key";
     final uri = Uri.https(_host, unencodedPath);
     final payload = SigV4.hashCanonicalRequest(body);
     final datetime = SigV4.generateDatetime();
