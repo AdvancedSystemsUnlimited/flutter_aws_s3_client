@@ -181,11 +181,18 @@ $payload''';
       {String key, String contentType, List<int> body}) async {
     String bodyStr = '';
 
-    body.forEach((i) => bodyStr += i.toString());
+    body.forEach((i) => bodyStr += _format3(i));
 
     final SignedRequestParams params =
         buildSignedPutObjectRequest(key, contentType, bodyStr);
     return _client.put(params.uri, headers: params.headers, body: bodyStr);
+  }
+
+  String _format3(int n) {
+    var s = n.toString();
+    s = "000" + s;
+    s = s.substring(s.length - 3);
+    return s;
   }
 }
 
